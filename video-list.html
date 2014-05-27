@@ -1,0 +1,128 @@
+<html>
+<head>
+	<script src="//ajax.googleapis.com/ajax/libs/jquery/2.1.1/jquery.min.js"></script>
+	<script>
+		function configApi() {
+			gapi.client.setApiKey( '<Your API Key>' )
+			gapi.client.load( 'youtube', 'v3', getUploadListId )
+		}
+		
+		function getUploadListId() {
+			var channelId = '<Your Channel ID>';
+			var r = gapi.client.youtube.channels.list(
+					{ part: 'contentDetails', id: channelId }
+				)
+
+			r.execute( function( data ) {
+				var id = data.items[0].contentDetails.relatedPlaylists.uploads
+				getVideoInfo( id )
+			} )
+		}
+		
+		function getVideoInfo( id ) { 
+			var page = ''
+			var videos = []
+			
+			getPageVids()
+			
+			function getPageVids( page ) {
+				var r = gapi.client.youtube.playlistItems.list(
+					{
+						playlistId: id,
+						part: 'snippet',
+						pageToken: page
+					}
+				)
+				
+				r.execute( function( data ) { 
+					var nextPage = data.nextPageToken
+					storeVids( data, videos )
+
+					if (nextPage) {
+						getPageVids( nextPage )
+					}
+				} ) // end execute
+			}
+			
+			function storeVids( data, store ) {
+				$( data.items ).each( function( n, vid ) {
+					var vidInfo = {
+						id: vid.snippet.resourceId.videoId,
+						title: vid.snippet.title,
+						description: vid.snippet.description,
+						images: vid.snippet.thumbnails
+					}
+
+					videos.push( vidInfo )
+				} ) // end items.each
+				
+				if (!data.nextPageToken) {
+					populateContent( videos )
+				}
+			}
+		} // end getVideoInfo
+		
+		function populateContent( videos ) { 
+			var csvContent = "videoId,videoTitle"
+			var $table = $( 'table#youtube-videos tbody' )
+			
+			$( videos ).each( function( n, vid ) {
+				var row_parity = ( n % 2 == 0 ? 'even' : 'odd' )
+				var out = "<tr class='youtube-video " + row_parity + "'>"
+				out += "<td class='video-id'>" + vid.id + "</td>"
+				out += "<td class='video-title'>" + vid.title + "</td>"
+				out += "<td class='video-description'>" + vid.description + "</td>"
+				out += "<td><a class='video-link' href='http://youtu.be/" + vid.id + "'>" +
+									"View</a></td>"
+				out += "</tr>"
+				
+				$table.append( out )
+				
+				csvContent += "\n" + vid.id + ',' + vid.title
+			} )
+			
+			$( '#youtube-video-count' ).text( 'Total Videos: ' + videos.length )
+			$( '#video-csv' ).text( csvContent )
+			
+			$( '#csv-download' ).attr( 'href', 'data:application/octet-stream,' + 
+				encodeURI( csvContent ) ).attr( 'download', 'ga-video-list.csv' )	
+		}
+		
+	</script>
+
+	<script src="https://apis.google.com/js/client.js?onload=configApi"></script>
+	
+	<style>
+		tr.even {
+			background-color: #DDD;
+		}
+		
+		td.video-title {
+			width: 20em;
+		}
+		
+		td.video-description {
+			width: 40em;
+		}
+	</style>
+</head>
+<body>
+	<div id='main'>
+		<div id='youtube-videos-wrapper'>
+			<h1>YouTube Videos</h1>
+			<h3 id='youtube-video-count'>Total Vids: 0</h3>
+			<textarea id='video-csv'></textarea>
+			<a id='csv-download' href=''>Download File</a>
+
+			<table id='youtube-videos'>
+				<thead>
+					<th>Id</th>
+					<th>Title</th>
+					<th>Description</th>
+				</thead>
+				<tbody>
+				</tbody>
+			</table>
+	</div>
+</body>
+</html>
