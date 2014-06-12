@@ -2,48 +2,60 @@
 <head>
 	<script src="//ajax.googleapis.com/ajax/libs/jquery/2.1.1/jquery.min.js"></script>
 	<script>
-		function configApi() {
-			gapi.client.setApiKey( '<Your API Key>' )
-			gapi.client.load( 'youtube', 'v3', getUploadListId )
-		}
-		
-		function getUploadListId() {
-			var channelId = '<Your Channel ID>';
-			var r = gapi.client.youtube.channels.list(
-					{ part: 'contentDetails', id: channelId }
-				)
-
-			r.execute( function( data ) {
-				var id = data.items[0].contentDetails.relatedPlaylists.uploads
-				getVideoInfo( id )
-			} )
-		}
-		
-		function getVideoInfo( id ) { 
-			var page = ''
-			var videos = []
-			
-			getPageVids()
-			
-			function getPageVids( page ) {
-				var r = gapi.client.youtube.playlistItems.list(
-					{
-						playlistId: id,
-						part: 'snippet',
-						pageToken: page
-					}
-				)
-				
-				r.execute( function( data ) { 
-					var nextPage = data.nextPageToken
-					storeVids( data, videos )
-
-					if (nextPage) {
-						getPageVids( nextPage )
-					}
-				} ) // end execute
+		var channels = [
+			{
+				id: 'UC67m9MjkWSZJtQLg6296aOA',
+				name: 'Easton Training Center'
+			},
+			{
+				id: 'UCYYe74apmTB9c4g6WZgPuBQ',
+				name: 'Amal Easton' 
 			}
+		];
+	
+		function configApi() {
+			gapi.client.setApiKey( 'AIzaSyBIMxZGXX5R-zMufEJBVaFV4b5JQlewpGc' )
+			gapi.client.load( 'youtube', 'v3', getUploadListIds )
+		}
+		
+		function getUploadListIds() {	
+			$( channels ).each( function( n, channel ) {
+				var r = gapi.client.youtube.channels.list(
+						{ part: 'contentDetails', id: channel.id }
+					)
+
+				r.execute( function( data ) {
+					channel.uploadId = 
+						data.items[0].contentDetails.relatedPlaylists.uploads
+
+					channel.videos = []
+					getChannelVideos( channel )
+				} ) // end execute
+			} ) // end channels.each
+		} // end getUploadListIds()
+		
+		function getChannelVideos( channel, page ) { 
+
+			var r = gapi.client.youtube.playlistItems.list(
+				{
+					playlistId: channel.uploadId,
+					part: 'snippet',
+					pageToken: page
+				}
+			)
 			
+			r.execute( function( data ) { 
+				var nextPage = data.nextPageToken
+				storeVids( data, channel.videos )
+
+				if ( nextPage ) {
+					getChannelVideos( channel, nextPage )
+				}
+				else {
+					populateChannelContent( channel )
+				}
+			} ) // end execute
+		
 			function storeVids( data, store ) {
 				$( data.items ).each( function( n, vid ) {
 					var vidInfo = {
@@ -53,39 +65,91 @@
 						images: vid.snippet.thumbnails
 					}
 
-					videos.push( vidInfo )
+					store.push( vidInfo )
 				} ) // end items.each
-				
-				if (!data.nextPageToken) {
-					populateContent( videos )
-				}
-			}
-		} // end getVideoInfo
+			} // end storeVids
+		} // end getChannelVideos
+
 		
-		function populateContent( videos ) { 
-			var csvContent = "videoId,videoTitle"
-			var $table = $( 'table#youtube-videos tbody' )
+		function populateChannelContent( channel ) { 
+			var csvContent = "ga:dimension1,ga:dimension2"
 			
-			$( videos ).each( function( n, vid ) {
+			var header = "<h2>" + channel.name + "</h2>" +
+				"<h3>Total Videos: " + channel.videos.length + "</h3>"		
+				
+			var table = "<table><thead><th>Id</th><th>Title</th>" +
+				"<th>Description</th></thead><tbody>"
+				
+			$( channel.videos ).each( function( n, vid ) {
 				var row_parity = ( n % 2 == 0 ? 'even' : 'odd' )
-				var out = "<tr class='youtube-video " + row_parity + "'>"
-				out += "<td class='video-id'>" + vid.id + "</td>"
-				out += "<td class='video-title'>" + vid.title + "</td>"
-				out += "<td class='video-description'>" + vid.description + "</td>"
-				out += "<td><a class='video-link' href='http://youtu.be/" + vid.id + "'>" +
-									"View</a></td>"
-				out += "</tr>"
+				table += "<tr class='youtube-video " + row_parity + "'>"
+				table += "<td class='video-id'>" + vid.id + "</td>"
+				table += "<td class='video-title'>" + vid.title + "</td>"
+				table += "<td class='video-description'>" + 
+					vid.description + "</td>"
+				table += "<td><a class='video-link' href='http://youtu.be/" +
+					vid.id + "'>View</a></td>"
+				table += "</tr>"
 				
-				$table.append( out )
-				
-				csvContent += "\n" + vid.id + ',' + vid.title
-			} )
+				csvContent += "\n" + vid.id + ',' + vid.title.replace(/,/g, ' ')
+			} ) // end videos.each
 			
-			$( '#youtube-video-count' ).text( 'Total Videos: ' + videos.length )
-			$( '#video-csv' ).text( csvContent )
+			table += "</tbody></table>"
 			
-			$( '#csv-download' ).attr( 'href', 'data:application/octet-stream,' + 
-				encodeURI( csvContent ) ).attr( 'download', 'ga-video-list.csv' )	
+			header += "<textarea id='" + channel.id + "-csv'>" +
+				csvContent + "</textarea>" +  
+				"<a id='" + channel.id + "-csv-download' href='" + 
+				"data:application/octet-string," + 
+				encodeURI( csvContent ) + "' download='ga-video-list-" +  
+				channel.id + ".csv'>Download</a>"
+			
+			var out = "<div id='channel-" + channel.id + "'>" + 
+				header + table +"</div>"
+			
+			$( '#channel-content' ).append( out )
+			
+			addTocEntry( channel )
+			updateAllContent( channel.videos.length, csvContent )
+			updateLoadState()
+		} // end populateContent()
+		
+		function addTocEntry( channel ) {
+			var toc = $( '#youtube-toc-list' )
+			toc.append(
+				"<li><a href='#channel-" + channel.id + "'>" + 
+				channel.name + "</a></li>"
+			)
+		}
+		
+		function updateAllContent( newVids, newCsvContent ) {
+			var youtube = $( '#all-youtube-content' );
+			var videoCount = youtube.find( '#youtube-video-count #vid-count' )
+			var csvContent = youtube.find( '#all-csv-content' )
+			var csvDownload = youtube.find( '#all-csv-download' )
+
+			videoCount.text( 
+				parseInt( videoCount.text() ) + newVids 
+			)
+			
+			newCsvContent = newCsvContent.slice( 27 ) // remove header
+			csvContent.text( csvContent.text() + newCsvContent	)
+			csvDownload.attr( 
+				'href',
+				csvDownload.attr( 'href' ) + encodeURI( newCsvContent )
+				)
+		} // end upadateAllContentCSV
+		
+		function updateLoadState() {
+			var total = channels.length
+			var complete = $( '#youtube-toc li' ).length
+			var loading = $( '#youtube-loading' )
+			var loadState = loading.find( '#load-state' )
+			if ( complete < total )
+				loadState.text( complete * 100 / total + '%')
+			else {	
+				loadState.text( 'Complete' )
+				loading.hide( 1500 )
+			}
 		}
 		
 	</script>
@@ -110,19 +174,26 @@
 	<div id='main'>
 		<div id='youtube-videos-wrapper'>
 			<h1>YouTube Videos</h1>
-			<h3 id='youtube-video-count'>Total Vids: 0</h3>
-			<textarea id='video-csv'></textarea>
-			<a id='csv-download' href=''>Download File</a>
-
-			<table id='youtube-videos'>
-				<thead>
-					<th>Id</th>
-					<th>Title</th>
-					<th>Description</th>
-				</thead>
-				<tbody>
-				</tbody>
-			</table>
+			<div id='youtube-loading'>
+				<h2>Loading Channels: <span id='load-state'>0%</span></h2>
+			</div>
+			<div id='all-youtube-content'>
+				<section id='youtube-toc'>
+					<h2>Channels</h2>
+					<ol id='youtube-toc-list'></ol>
+				</section>
+				<h2>All Content</h2>
+				<h3 id='youtube-video-count'>
+					Total Videos: <span id='vid-count'>0</span>
+				</h3>
+				<textarea id='all-csv-content'>ga:dimension1,ga:dimension2</textarea>
+				<a id='all-csv-download' 
+					href='data:application/octet-string,ga:dimension1,ga:dimension2'
+					download='ga-video-list-all-youtube-content'>
+						Download File
+				</a>
+			</div>
+			<div id='channel-content'></div>
 	</div>
 </body>
 </html>
