@@ -146,7 +146,9 @@
 			
 			function outputFormHtml( form ) {
 				console.log( 'outputting form html...' )
-				$( '#hc-form' ).append( form.outerHTML )
+				var formArea = $( '#hc-form' )
+				formArea.empty()
+				formArea.append( form.outerHTML )
 
 				loadFormData()
 			}
@@ -209,7 +211,7 @@
 						value: selected.attr( 'value' )
 					} )
 
-					convertedForm.append(converted)
+					convertedForm.append( converted )
 				} )
 
 				convertedForm.append( submit )
@@ -220,7 +222,25 @@
 				var html = $( '#form-html-converted' )
 				var wrapper = $( '#hc-form-converted' )
 				
+				wrapper.empty()
 				wrapper.append( $( html.val() ) )
+				
+				var hiddenInputs = wrapper.find( 'input[type=hidden]' ); console.log(hiddenInputs)
+				var hiddenValues = {}
+				var hiddenOut = $( '<ul />' )
+				hiddenInputs.each( function() {
+					var inName = $( this ).attr( 'name' )
+					var nameMatch = /\[(\d+-\w+)\]$/i.exec( inName )
+					inName = nameMatch[1]
+					
+					var inVal = $( this ).attr( 'value' )
+
+					hiddenValues[ inName ] = inVal 
+					hiddenOut.append( '<li>' + inName + ': ' + inVal + '</li>' )
+				} )
+				wrapper.append( hiddenOut )
+				
+				console.log( 'done' )
 			}
 		</script>
 	</div>
